@@ -1,0 +1,16 @@
+replicaCount: 2
+
+image:
+  repository: your-dockerhub-username/user-service
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 3000
+
+resources: {}
+
+ingress:
+  annotations:
+    alb.ingress.kubernetes.io/load-balancer-name: user-alb
