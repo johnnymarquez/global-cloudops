@@ -5,7 +5,6 @@ export class MicroserviceStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
-    // Define ALB, Fargate/EKS service, DNS records, etc. here
   }
 }
 

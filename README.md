@@ -39,8 +39,13 @@ multi-region-microservices/
 🔺︎🔺︎🔺︎ main.tf
 🔺︎🔺︎ eu-west-1/
 🔺︎🔺︎🔺︎ main.tf
+🔺︎🔺︎ route53/
+🔺︎🔺︎🔺︎ main.tf
+🔺︎🔺︎🔺︎ variables.tf
 🔺︎🔺︎ providers.tf
 🔺︎🔺︎ backend.tf
+🔺︎ monitoring/
+🔺︎🔺︎ values.yaml
 🔺︎ cdk/
 🔺︎ services/
 🔺︎🔺︎ user/
@@ -57,132 +62,72 @@ multi-region-microservices/
 
 ---
 
-## 🚀 Features
+## ⚙️ Manual Deployment Steps
 
-- ✅ Multi-region microservices with automatic failover
-- ✅ Scalable and secure EKS clusters
-- ✅ IaC with Terraform & CDK for full infra + service management
-- ✅ GitHub Actions for build and deployment pipelines
-- ✅ Monitoring with Prometheus & Grafana
-- ✅ Latency-based routing via Route 53
+### 📖 Prerequisites
+- AWS CLI configured with credentials
+- Terraform v1.3+
+- CDK v2 (with `cdk` CLI installed)
+- kubectl
+- Helm
+- Docker (if building locally)
 
----
-
-## ⚙️ Deployment Steps
-
-### 1. 📦 Infrastructure (Terraform)
+### ⚡ Terraform Infra (Run from `infra/terraform/`)
 
 ```bash
-cd infra/terraform
 terraform init
-terraform apply
+terraform apply -var-file="terraform.tfvars"
 ```
 
-#### Terraform State Backend
-This project uses **S3 + DynamoDB** for remote state:
-- Create an S3 bucket and DynamoDB table first (or use included module).
-- Set values in `backend.tf` accordingly.
-
-```hcl
-terraform {
-  backend "s3" {
-    bucket         = "my-tf-state-johnny"
-    key            = "multi-region/terraform.tfstate"
-    region         = "us-east-1"
-    dynamodb_table = "terraform-locks"
-    encrypt        = true
-  }
-}
-```
-
-### 2. 💠 Deploy Services (CDK)
-
+### 🚀 CDK App Deploy (Run from `infra/cdk/`)
 ```bash
-cd infra/cdk
 npm install
-cdk deploy
+cdk bootstrap aws://<account-id>/us-east-1
+cdk bootstrap aws://<account-id>/eu-west-1
+cdk deploy --all
 ```
 
-### 3. 🚀 CI/CD Pipeline
-
-Set up GitHub secrets for:
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `CDK_DEPLOY_REGION`
-- `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN`
-
-Workflows will:
-- Build & push Docker images
-- Trigger CDK deployments
-
----
-
-## 📊 Observability
-
-- Dashboards available at `/grafana`
-- Logs sent to CloudWatch (or Loki stack)
-- Health checks configured via ALB
-
----
-
-## 🌐 DNS & Traffic Routing
-
-- Route 53 configured with **Latency-based Routing**
-- Users are routed to the closest healthy region
-- Failover to secondary region in case of downtime
-
----
-
-## 🧪 Testing
-
-To test regional routing:
-
+### ⚓ Deploy Monitoring Stack (Per Cluster)
 ```bash
-curl -H "Host: myservice.example.com" http://<ALB-DNS>
+# For us-east-1
+aws eks update-kubeconfig --region us-east-1 --name eks-us-east-1
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+  --namespace monitoring --create-namespace \
+  -f infra/monitoring/values.yaml
+
+# For eu-west-1
+aws eks update-kubeconfig --region eu-west-1 --name eks-eu-west-1
+helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+  --namespace monitoring --create-namespace \
+  -f infra/monitoring/values.yaml
 ```
 
-Or use [globalping.io](https://globalping.io) to test from different regions.
+### 🔧 Build and Push Services (example for user)
+```bash
+cd services/user
+docker build -t <dockerhub-user>/user-service .
+docker push <dockerhub-user>/user-service
+```
 
----
+### 🌐 Deploy with Helm (per service, per cluster)
+```bash
+aws eks update-kubeconfig --region us-east-1 --name eks-us-east-1
+helm upgrade --install user-service ./services/user/chart \
+  --set image.repository=<dockerhub-user>/user-service \
+  --set image.tag=latest \
+  --namespace user --create-namespace
+```
 
-## 💸 Cost Estimation
-
-This setup uses:
-- 2 EKS clusters
-- Route 53
-- Load balancers
-- RDS/DynamoDB
-- CloudWatch + Prometheus
-
-Total expected cost (dev/test scale): **~$50–100/month**  
-Use `infracost` to estimate before deploying.
-
----
-
-## 📌 TODO
-
-- [ ] Add Istio service mesh (optional)
-- [ ] Enable secret management (e.g., SealedSecrets or AWS Secrets Manager)
-- [ ] Add auto-scaling policies
-- [ ] Publish architecture diagram
-
----
-
-## 🧠 Learnings & Goals
-
-This project demonstrates:
-- Deploying fault-tolerant multi-region systems
-- Automating everything via IaC
-- Managing microservices in Kubernetes
-- CI/CD best practices using GitHub Actions
-- Building observable and monitorable platforms
-
----
-
-## 🧑‍💻 Author
-
-**Johnny Marquez**  
-DevOps Engineer | [LinkedIn](https://linkedin.com/in/johnnymarquezv) | [GitHub](https://github.com/johnnymarquez)
+### 🌍 View Grafana
+```bash
+kubectl get svc -n monitoring grafana
+```
+Open the external IP in browser:
+```
+http://<external-ip>:80
+```
+Login: admin / admin123
 
 ---
 
